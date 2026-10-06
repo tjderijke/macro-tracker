@@ -6,7 +6,7 @@ import { renderWeight } from './views/weight.js';
 import { renderSettings } from './views/settings.js';
 import { setChangeHandler } from './food.js';
 import { isSheetOpen, closeSheet } from './ui.js';
-import { today } from './util.js';
+import { esc, today } from './util.js';
 
 const VIEWS = {
   vandaag: renderToday,
@@ -46,7 +46,7 @@ const app = {
       await VIEWS[view](next, this);
     } catch (err) {
       console.error(err);
-      next.innerHTML = `<p class="empty error-text">Er ging iets mis: ${String(err.message || err)}</p>`;
+      next.innerHTML = `<p class="empty error-text">Er ging iets mis: ${esc(err.message || err)}</p>`;
     }
     if (this.rendering !== token) return;
     root.replaceChildren(...next.childNodes);

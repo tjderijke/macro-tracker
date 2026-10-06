@@ -40,6 +40,14 @@ Een eigen voedingsapp voor op mijn iPhone, omdat bestaande apps (MyFitnessPal, F
 - `nevo/` staat in `.gitignore` (alleen lokaal)
 - Lokaal testen: `python -m http.server 8080` in deze map, dan http://127.0.0.1:8080
 
+## Beveiliging
+- Content Security Policy in `index.html` (meta-tag): alleen scripts van eigen site + `'wasm-unsafe-eval'` voor de scanner; `connect-src` alleen eigen site en `world.openfoodfacts.org`. Nieuwe externe dienst nodig? Dan daar toevoegen.
+- Alle tekst van buitenaf (o.a. Open Food Facts) via `esc()` in HTML zetten.
+- Grootste risico is overname van het GitHub-account (dan kan de code worden aangepast): 2FA aan.
+
+## Volgende stappen (stand 6 okt 2026)
+- App testen op de iPhone: beginscherm, doelen, NEVO-zip importeren, barcode scannen met de camera (ook controleren dat de scanner werkt met de CSP).
+
 ## Werkafspraken
 - Communicatie in het Nederlands.
 - Bouw eerst een kleine werkende versie (MVP), test die op mijn iPhone, en breid daarna uit.

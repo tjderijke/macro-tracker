@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Beveiliging: alleen code van deze site uitvoeren (plus WebAssembly voor de scanner),
+       en alleen met deze site en Open Food Facts communiceren. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://world.openfoodfacts.org; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Macro's</title>
   <meta name="description" content="Persoonlijke voedings- en gewichtstracker">
   <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)">
