@@ -45,8 +45,9 @@ Een eigen voedingsapp voor op mijn iPhone, omdat bestaande apps (MyFitnessPal, F
 - Alle tekst van buitenaf (o.a. Open Food Facts) via `esc()` in HTML zetten.
 - Grootste risico is overname van het GitHub-account (dan kan de code worden aangepast): 2FA aan.
 
-## Volgende stappen (stand 6 okt 2026)
-- App testen op de iPhone: beginscherm, doelen, NEVO-zip importeren, barcode scannen met de camera (ook controleren dat de scanner werkt met de CSP).
+## Status (6 okt 2026)
+- Live op https://tjderijke.github.io/macro-tracker/ en op het beginscherm van de iPhone gezet; de camerascanner werkt (ook met de CSP).
+- Volgende stap: de gebruiker test een paar dagen en komt terug met wat fijn is en wat niet werkt. Daarna verbeteren en uitbreiden.
 
 ## Werkafspraken
 - Communicatie in het Nederlands.
