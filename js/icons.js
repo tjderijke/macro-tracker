@@ -18,5 +18,7 @@ export const icons = {
   close: (s) => svg('<path d="M6 6l12 12M18 6L6 18"/>', s),
   meal: (s) => svg('<path d="M3.5 12.5h17a8.5 8.5 0 0 1-17 0z"/><path d="M9 9c0-2 1.5-2 1.5-4M13.5 9c0-2 1.5-2 1.5-4"/>', s),
   save: (s) => svg('<path d="M5 3.5h11l3.5 3.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5z"/><path d="M7.5 3.5v5h8v-5M7.5 20.5v-6.5h9v6.5"/>', s),
+  check: (s) => svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', s),
+  circle: (s) => svg('<circle cx="12" cy="12" r="8"/>', s),
   copy: (s) => svg('<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5v-3a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/>', s),
 };

@@ -1,4 +1,5 @@
-// Gewicht: invoeren en het verloop door de tijd bekijken.
+// Gewicht: invoeren en het verloop door de tijd bekijken, met een 7-daags gemiddelde
+// (dat schommelt minder door vocht en eten dan losse metingen).
 
 import * as store from '../store.js';
 import { weightChart } from '../chart.js';
@@ -13,12 +14,38 @@ const RANGES = [
   { id: 'all', label: 'Alles', days: null },
 ];
 
+// Per meting: het gemiddelde van alle metingen in de 7 dagen tot en met die dag.
+function rollingAverage(all) {
+  return all.map((w, i) => {
+    const from = addDays(w.date, -6);
+    let sum = 0;
+    let n = 0;
+    for (let j = i; j >= 0 && all[j].date >= from; j--) {
+      sum += all[j].kg;
+      n++;
+    }
+    return { date: w.date, kg: sum / n };
+  });
+}
+
+function averageBetween(all, from, to) {
+  const list = all.filter((w) => w.date >= from && w.date <= to);
+  if (!list.length) return null;
+  return { kg: list.reduce((s, w) => s + w.kg, 0) / list.length, n: list.length };
+}
+
+const signed = (d) => `${d > 0.05 ? '+' : d < -0.05 ? '−' : '±'}${fmt1(Math.abs(d))}`;
+// Toename groen, afname rood.
+const trend = (d) => (d > 0.05 ? 'up' : d < -0.05 ? 'down' : '');
+
 export async function renderWeight(root, app) {
   const all = await store.weights();
+  const avgAll = rollingAverage(all);
   const rangeId = app.weightRange || '90';
   const range = RANGES.find((r) => r.id === rangeId);
   const from = range.days ? addDays(today(), -range.days) : '0000-00-00';
   const shown = all.filter((w) => w.date >= from);
+  const shownAvg = avgAll.filter((w) => w.date >= from);
   const last = all.at(-1);
   const todays = all.find((w) => w.date === today());
 
@@ -52,17 +79,22 @@ export async function renderWeight(root, app) {
   });
   root.append(form);
 
-  // --- Kerncijfers ---
-  if (shown.length) {
-    const first = shown[0];
-    const end = shown.at(-1);
-    const diff = end.kg - first.kg;
-    const sign = diff > 0 ? '+' : diff < 0 ? '−' : '±';
+  // --- Kerncijfers: gemiddelde van de afgelopen 7 dagen ---
+  if (last) {
+    // Geen metingen deze week? Dan de laatste 7 dagen waarin je wel gewogen hebt.
+    let end = today();
+    let week = averageBetween(all, addDays(end, -6), end);
+    if (!week) {
+      end = last.date;
+      week = averageBetween(all, addDays(end, -6), end);
+    }
+    const prev = averageBetween(all, addDays(end, -13), addDays(end, -7));
+    const weekSub = `${week.n} ${week.n === 1 ? 'meting' : 'metingen'}${end !== today() ? ` t/m ${fmtDateShort(end)}` : ''}`;
     root.append(
-      html(`<div class="stats">
-        <div class="stat"><span class="label">Huidig</span><span class="value">${fmt1(last.kg)} kg</span><span class="sub">${esc(fmtDateShort(last.date))}</span></div>
-        <div class="stat"><span class="label">Verschil</span><span class="value">${sign}${fmt1(Math.abs(diff))} kg</span><span class="sub">sinds ${esc(fmtDateShort(first.date))}</span></div>
-        <div class="stat"><span class="label">Laagst / hoogst</span><span class="value small">${fmt1(Math.min(...shown.map((w) => w.kg)))} / ${fmt1(Math.max(...shown.map((w) => w.kg)))}</span><span class="sub">in deze periode</span></div>
+      html(`<div class="stats two">
+        <div class="stat main"><span class="label">Gemiddelde van de afgelopen 7 dagen</span><span class="value">${fmt1(week.kg)} kg</span><span class="sub">${esc(weekSub)}</span></div>
+        <div class="stat"><span class="label">T.o.v. week ervoor</span><span class="value ${prev ? trend(week.kg - prev.kg) : ''}">${prev ? `${signed(week.kg - prev.kg)} kg` : '–'}</span><span class="sub">${prev ? `toen ${fmt1(prev.kg)} kg` : 'nog geen gegevens'}</span></div>
+        <div class="stat"><span class="label">Laatste meting</span><span class="value">${fmt1(last.kg)} kg</span><span class="sub">${esc(fmtDateShort(last.date))}</span></div>
       </div>`),
     );
   }
@@ -76,8 +108,15 @@ export async function renderWeight(root, app) {
   chartCard.append(rangeSel);
   const chartHost = html('<div class="chart-host"></div>');
   chartCard.append(chartHost);
+  if (shownAvg.length >= 2) {
+    const d = shownAvg.at(-1).kg - shownAvg[0].kg;
+    chartCard.append(
+      html(`<p class="chart-note"><span class="key-line"></span> 7-daags gemiddelde <span class="key-dot"></span> meting
+        <span class="chart-change ${trend(d)}">Gemiddelde ${signed(d)} kg sinds ${esc(fmtDateShort(shownAvg[0].date))}</span></p>`),
+    );
+  }
   root.append(chartCard);
-  requestAnimationFrame(() => weightChart(chartHost, shown));
+  requestAnimationFrame(() => weightChart(chartHost, shown, shownAvg));
 
   // --- Lijst (ook de tabelweergave van de grafiek) ---
   if (all.length) {
@@ -85,7 +124,7 @@ export async function renderWeight(root, app) {
     const list = html(`<div class="card">
       <h2 class="card-title">Metingen</h2>
       <table class="table">
-        <thead><tr><th>Datum</th><th class="num">kg</th><th class="num">Verschil</th><th></th></tr></thead>
+        <thead><tr><th>Datum</th><th class="num">kg</th><th class="num">Gem. 7 d</th><th class="num">Verschil</th><th></th></tr></thead>
         <tbody>${rows
           .map((w) => {
             const idx = all.indexOf(w);
@@ -94,7 +133,8 @@ export async function renderWeight(root, app) {
             return `<tr>
               <td>${esc(fmtDateShort(w.date, true))}</td>
               <td class="num">${fmt1(w.kg)}</td>
-              <td class="num muted">${d === null ? '' : `${d > 0 ? '+' : d < 0 ? '−' : '±'}${fmt1(Math.abs(d))}`}</td>
+              <td class="num">${fmt1(avgAll[idx].kg)}</td>
+              <td class="num muted ${d === null ? '' : trend(d)}">${d === null ? '' : signed(d)}</td>
               <td class="num"><button class="icon-btn small" data-del="${w.date}" aria-label="Meting verwijderen">${icons.trash(16)}</button></td>
             </tr>`;
           })

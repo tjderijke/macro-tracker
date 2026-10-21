@@ -1,6 +1,8 @@
 // Open Food Facts: gratis, open productdatabase (crowdsourced).
 // Productgegevens: Open Database License (ODbL), (c) Open Food Facts-bijdragers.
 
+import { MICROS } from './util.js';
+
 const BASE = 'https://world.openfoodfacts.org';
 const FIELDS = [
   'code', 'product_name', 'product_name_nl', 'generic_name_nl', 'brands', 'quantity',
@@ -28,6 +30,15 @@ export function fromOff(p) {
     fiber: num(n.fiber_100g),
     salt: num(n.salt_100g),
   };
+  // Vitamines en mineralen staan bij Open Food Facts in gram; omrekenen naar mg of µg.
+  const factor = { mg: 1000, 'µg': 1e6 };
+  for (const m of MICROS) {
+    const v = m.off ? num(n[`${m.off}_100g`]) : null;
+    if (v !== null) per100[m.id] = v * factor[m.unit];
+  }
+  const epa = num(n['eicosapentaenoic-acid_100g']);
+  const dha = num(n['docosahexaenoic-acid_100g']);
+  if (epa !== null || dha !== null) per100.epadha = ((epa || 0) + (dha || 0)) * 1000;
   const brands = Array.isArray(p.brands) ? p.brands.join(', ') : p.brands || '';
   const name = (p.product_name_nl || p.product_name || p.generic_name_nl || '').trim();
   const servings = [];

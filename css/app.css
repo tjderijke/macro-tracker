@@ -12,7 +12,12 @@
   --accent: #2a78d6;
   --accent-text: #256abf;
   --accent-track: #cde2fb;
-  --over: #ec835a;
+  --good: #22a05a;
+  --good-text: #1b7d46;
+  --good-track: #cdeedb;
+  --bad: #e0443a;
+  --bad-text: #b3261e;
+  --bad-track: #f8d4d0;
   --danger-text: #b3261e;
   --toast: #222220;
 }
@@ -31,7 +36,12 @@
     --accent: #3987e5;
     --accent-text: #6da7ec;
     --accent-track: #1b3556;
-    --over: #ec835a;
+    --good: #3cbf73;
+    --good-text: #6fd59a;
+    --good-track: #183a27;
+    --bad: #ef5a4f;
+    --bad-text: #f2938c;
+    --bad-track: #4a201d;
     --danger-text: #f2938c;
     --toast: #3a3a37;
   }
@@ -50,7 +60,12 @@
   --accent: #3987e5;
   --accent-text: #6da7ec;
   --accent-track: #1b3556;
-  --over: #ec835a;
+  --good: #3cbf73;
+  --good-text: #6fd59a;
+  --good-track: #183a27;
+  --bad: #ef5a4f;
+  --bad-text: #f2938c;
+  --bad-track: #4a201d;
   --danger-text: #f2938c;
   --toast: #3a3a37;
 }
@@ -275,6 +290,24 @@ input[type="date"] { min-height: 46px; }
 }
 
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.chip.small { min-height: 32px; padding: 5px 11px; font-size: 13px; }
+
+.notice {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  font-size: 14px;
+}
+
+details.more { margin-top: 12px; border-top: 1px solid var(--line); }
+details.more summary {
+  padding: 12px 2px;
+  color: var(--accent-text);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
 
 .search-bar { position: relative; }
 .search-bar input { padding-left: 38px !important; }
@@ -309,6 +342,48 @@ input[type="date"] { min-height: 46px; }
 .summary .unit { color: var(--text-2); }
 .summary .sub { font-size: 14px; color: var(--text-2); }
 .summary .fiber { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.summary-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.summary-foot .fiber { margin-top: 0; }
+.summary .link { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; }
+.summary-foot .link { padding: 6px 0; }
+
+/* Checklist: supplementen en weekchecks */
+.cl-title { margin: 0 0 8px; font-size: 15px; }
+.cl-title:not(:first-child) { margin-top: 16px; }
+.supps { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.supp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 15px;
+}
+
+.supp-box {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--muted);
+  border-radius: 6px;
+}
+
+.supp[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); font-weight: 600; }
+.supp[aria-pressed="true"] .supp-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.supp:active { opacity: 0.6; }
+
+.wk-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 8px; padding: 7px 0; }
+.wk-row + .wk-row { border-top: 1px solid var(--line); }
+.wk-status { color: var(--muted); }
+.wk-row.ok .wk-status { color: var(--accent-text); }
+.wk-main { display: flex; flex-direction: column; min-width: 0; }
+.wk-name { font-weight: 600; }
+.wk-sub { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .macro-plain { color: var(--text-2); margin: 4px 0 8px; }
 
 .meter {
@@ -320,8 +395,10 @@ input[type="date"] { min-height: 46px; }
 }
 
 .meter span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
-.meter.over { background: color-mix(in srgb, var(--over) 28%, var(--surface)); }
-.meter.over span { background: var(--over); }
+.meter.ok { background: var(--good-track); }
+.meter.ok span { background: var(--good); }
+.meter.over { background: var(--bad-track); }
+.meter.over span { background: var(--bad); }
 .meter.empty { background: var(--surface-2); }
 
 .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
@@ -330,7 +407,19 @@ input[type="date"] { min-height: 46px; }
 .macro-top .name { font-size: 13px; color: var(--text-2); }
 .macro-top .val { font-size: 15px; white-space: nowrap; }
 .macro-left { font-size: 12px; color: var(--muted); }
-.macro-left.over { color: var(--danger-text); font-weight: 600; }
+.macro-left.over { color: var(--bad-text); font-weight: 600; }
+.macro-top .name { display: flex; justify-content: space-between; gap: 4px; }
+
+/* Percentage van het doel: blauw = nog onder, groen = binnen de marge, rood = te veel. */
+.kcal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.pct-badge { font-size: 24px; font-weight: 700; line-height: 1.2; color: var(--accent-text); font-variant-numeric: tabular-nums; }
+.mpct { font-weight: 700; color: var(--accent-text); font-variant-numeric: tabular-nums; }
+.pct-badge.ok, .mpct.ok { color: var(--good-text); }
+.pct-badge.over, .mpct.over { color: var(--bad-text); }
+
+/* Gewicht: toename groen, afname rood. */
+.up, .table td.up, .chart-change.up { color: var(--good-text); }
+.down, .table td.down, .chart-change.down { color: var(--bad-text); }
 
 .moment-head { display: flex; justify-content: space-between; align-items: baseline; }
 .moment-head h3 { margin: 0; font-size: 18px; }
@@ -354,6 +443,19 @@ input[type="date"] { min-height: 46px; }
 .e-name, .row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .e-sub, .row-sub { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .e-kcal { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Vitamines en mineralen ---------- */
+.coverage { display: flex; align-items: baseline; gap: 8px; }
+.coverage .big { font-size: 28px; font-weight: 700; }
+.micro { padding: 8px 0; }
+.micro + .micro { border-top: 1px solid var(--line); }
+.micro-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.micro-top .name { font-size: 15px; }
+.micro-top .val { font-size: 14px; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.micro-bar { display: grid; grid-template-columns: 1fr 64px; align-items: center; gap: 10px; }
+.micro-bar .meter { height: 6px; margin: 6px 0 2px; }
+.pct { font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.pct.over { color: var(--danger-text); font-weight: 600; }
 
 /* ---------- Lijsten ---------- */
 .list {
@@ -547,6 +649,9 @@ input[type="date"] { min-height: 46px; }
   min-width: 0;
 }
 
+.stats.two { grid-template-columns: repeat(2, 1fr); }
+.stat.main { grid-column: 1 / -1; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.stat.main .value { font-size: 30px; letter-spacing: -0.02em; }
 .stat .label { font-size: 12px; color: var(--text-2); }
 .stat .value { font-size: 20px; font-weight: 700; white-space: nowrap; }
 .stat .value.small { font-size: 16px; padding: 3px 0; }
@@ -560,6 +665,11 @@ input[type="date"] { min-height: 46px; }
 .chart .area { fill: var(--accent); opacity: 0.1; }
 .chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart .dot, .chart .hover-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.chart .dot-raw { fill: var(--accent); opacity: 0.35; }
+.chart-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 8px 0 0; font-size: 12px; color: var(--text-2); }
+.key-line { display: inline-block; width: 16px; height: 2px; border-radius: 1px; background: var(--accent); }
+.key-dot { display: inline-block; width: 7px; height: 7px; margin-left: 8px; border-radius: 50%; background: var(--accent); opacity: 0.35; }
+.chart-change { margin-left: auto; font-weight: 600; color: var(--text); }
 .chart .end-label { fill: var(--text); font-size: 12px; font-weight: 600; }
 .chart .cross { stroke: var(--muted); stroke-width: 1; }
 

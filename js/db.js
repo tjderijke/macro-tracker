@@ -54,6 +54,12 @@ export async function getByIndex(name, index, value) {
   return done((await store(name)).index(index).getAll(value));
 }
 
+// Alle records met een sleutel (of indexwaarde) van `lower` tot en met `upper`.
+export async function getRange(name, lower, upper, index = null) {
+  const s = await store(name);
+  return done((index ? s.index(index) : s).getAll(IDBKeyRange.bound(lower, upper)));
+}
+
 export async function put(name, value) {
   await done((await store(name, 'readwrite')).put(value));
   return value;

@@ -2,7 +2,7 @@
 // Strategie: eerst het netwerk proberen (zodat je altijd de nieuwste versie krijgt),
 // en bij geen of trage verbinding de opgeslagen kopie gebruiken.
 
-const CACHE = 'macro-tracker-v1';
+const CACHE = 'macro-tracker-v2';
 const SHELL = [
   './',
   'index.html',
@@ -19,6 +19,8 @@ const SHELL = [
   'js/nevo.js',
   'js/scanner.js',
   'js/chart.js',
+  'js/checks.js',
+  'js/micros.js',
   'js/views/today.js',
   'js/views/library.js',
   'js/views/weight.js',

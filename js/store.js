@@ -1,9 +1,17 @@
 // Gegevenslaag van de app: instellingen, doelen, dagboek, producten, maaltijden en gewicht.
 
 import * as db from './db.js';
-import { weekday, scaleN, sumN, norm, emptyN } from './util.js';
+import { weekday, scaleN, sumN, norm, emptyN, NUTRIENTS, MICROS, hasMicros } from './util.js';
 
 const emptyGoal = () => ({ kcal: null, prot: null, carb: null, fat: null });
+
+// Pillen die je dagelijks afvinkt. `micros`: wat één dosis bevat (in de eenheden van MICROS).
+const DEFAULT_SUPPLEMENTS = [
+  { id: 's_creatine', name: 'Creatine', micros: {} },
+  { id: 's_vitamines', name: 'Vitamines', micros: {} },
+];
+
+export const defaultMicroGoals = () => Object.fromEntries(MICROS.map((m) => [m.id, m.goal]));
 
 // --- Instellingen en doelen ---
 
@@ -19,6 +27,8 @@ export async function getSettings() {
       rust: { ...emptyGoal(), ...(s.goals?.rust || {}) },
     },
     trainingDays: Array.isArray(s.trainingDays) ? s.trainingDays : [],
+    supplements: Array.isArray(s.supplements) ? s.supplements : structuredClone(DEFAULT_SUPPLEMENTS),
+    microGoals: { ...defaultMicroGoals(), ...(s.microGoals || {}) },
   };
   return settingsCache;
 }
@@ -43,8 +53,31 @@ export async function getDayType(date) {
   return s.trainingDays.includes(weekday(date)) ? 'training' : 'rust';
 }
 
+// Per dag: { date, type?, checks?: { [id]: true } } (type alleen als je het zelf omzet).
+async function getDay(date) {
+  return (await db.get('days', date)) || { date };
+}
+
 export async function setDayType(date, type) {
-  await db.put('days', { date, type });
+  await db.put('days', { ...(await getDay(date)), date, type });
+}
+
+export async function checksFor(date) {
+  return (await getDay(date)).checks || {};
+}
+
+// Zet een afvinkje (supplement of weekcheck) aan of uit. Geeft de nieuwe stand terug.
+export async function toggleCheck(date, id) {
+  const day = await getDay(date);
+  const checks = { ...(day.checks || {}) };
+  if (checks[id]) delete checks[id];
+  else checks[id] = true;
+  await db.put('days', { ...day, checks });
+  return !!checks[id];
+}
+
+export function daysBetween(from, to) {
+  return db.getRange('days', from, to);
 }
 
 export async function goalsFor(date) {
@@ -58,6 +91,10 @@ export async function goalsFor(date) {
 export async function logForDate(date) {
   const entries = await db.getByIndex('log', 'date', date);
   return entries.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+}
+
+export function logBetween(from, to) {
+  return db.getRange('log', from, to, 'date');
 }
 
 export async function addLog(entry) {
@@ -92,10 +129,16 @@ async function touch(storeName, id) {
 
 // --- Producten ---
 
+const BASE_KEYS = [...new Set([...NUTRIENTS, ...MICROS].map((n) => n.id))];
+
 export function productBase(product) {
-  // Voedingswaarden per 1 gram (of ml).
+  // Voedingswaarden per 1 gram (of ml), inclusief vitamines en mineralen als die bekend zijn.
   const p = product.per100 || {};
-  return scaleN({ kcal: p.kcal, prot: p.prot, carb: p.carb, fat: p.fat, fiber: p.fiber }, 1 / 100);
+  const n = {};
+  for (const k of BASE_KEYS) if (Number.isFinite(p[k])) n[k] = p[k];
+  // `mk`: kcal waarvan de micronutriënten bekend zijn (om te laten zien hoe volledig het dagtotaal is).
+  if (hasMicros(p)) n.mk = p.kcal || 0;
+  return scaleN(n, 1 / 100);
 }
 
 export function getProduct(id) {
@@ -213,6 +256,68 @@ export async function recentItems(limit = 30) {
   ]
     .sort((a, b) => b.item.lastUsed.localeCompare(a.item.lastUsed))
     .slice(0, limit);
+}
+
+// --- Micronutriënten achteraf aanvullen (na het importeren van de NEVO-tabel) ---
+
+const MICRO_KEYS = MICROS.map((m) => m.id);
+
+// Voegt alleen ontbrekende micronutriënten toe; macro's en eigen waarden blijven zoals ze zijn.
+function fillMissing(target, source) {
+  let changed = false;
+  for (const k of MICRO_KEYS) {
+    if (!Number.isFinite(target[k]) && Number.isFinite(source[k])) {
+      target[k] = source[k];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// Vult producten, maaltijden en dagboekregels die uit NEVO komen aan met vitamines en mineralen.
+// `nevoItems`: de NEVO-records (met per100 inclusief micronutriënten).
+export async function backfillMicros(nevoItems) {
+  const byCode = new Map(nevoItems.map((n) => [n.code, n.per100]));
+  const products = await db.getAll('products');
+  const productById = new Map();
+  for (const p of products) {
+    productById.set(p.id, p);
+    const src = p.nevoCode && byCode.get(p.nevoCode);
+    if (src && fillMissing((p.per100 ||= {}), src)) await db.put('products', p);
+  }
+
+  const meals = await db.getAll('meals');
+  const mealById = new Map();
+  for (const m of meals) {
+    mealById.set(m.id, m);
+    let changed = false;
+    for (const it of m.items || []) {
+      const p = it.productId && productById.get(it.productId);
+      if (p && fillMissing((it.per100 ||= {}), p.per100 || {})) changed = true;
+    }
+    if (changed) await db.put('meals', m);
+  }
+
+  // Dagboekregels: alleen de micronutriënten toevoegen aan de bewaarde kopie (`base`).
+  for (const e of await db.getAll('log')) {
+    if (!e.base || hasMicros(e.base)) continue;
+    let src = null;
+    if (e.kind === 'product') {
+      const p = productById.get(e.refId);
+      if (p && hasMicros(p.per100)) src = productBase(p);
+    } else if (e.kind === 'meal') {
+      const m = mealById.get(e.refId);
+      if (m) {
+        const t = mealTotals(m);
+        src = e.unit === 'g' ? t.perGram : t.perPortion;
+      }
+    }
+    if (!src || !src.mk) continue;
+    fillMissing(e.base, src);
+    e.base.mk = src.mk;
+    e.n = scaleN(e.base, e.amount);
+    await db.put('log', e);
+  }
 }
 
 // --- Gewicht ---

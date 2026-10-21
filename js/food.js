@@ -4,11 +4,12 @@ import * as store from './store.js';
 import * as nevo from './nevo.js';
 import * as off from './off.js';
 import { startScanner } from './scanner.js';
+import { WEEKLY, productTags, mealTags } from './checks.js';
 import {
   openSheet, pushPage, popPage, popTo, replacePage, closeSheet, toast, confirmDialog, html, segmented, selectOnFocus,
 } from './ui.js';
 import {
-  esc, fmt0, fmtG, parseNum, numToInput, MOMENTS, NUTRIENTS, scaleN, macroLine, kcalFromMacros, debounce,
+  esc, fmt0, fmtG, parseNum, numToInput, MOMENTS, NUTRIENTS, MICROS, scaleN, macroLine, kcalFromMacros, debounce,
 } from './util.js';
 import { icons } from './icons.js';
 
@@ -53,6 +54,30 @@ function nutritionPreview(n, { title = 'Totaal' } = {}) {
       <div><span class="v">${fmtG(n.fat)} g</span><span class="l">Vet</span></div>
     </div>
   </div>`;
+}
+
+// Chips "Telt mee voor de weekcheck". `getTags()` geeft de huidige stand (zelf ingesteld of herkend),
+// `setTags(lijst)` legt een eigen keuze vast.
+function tagChips(getTags, setTags) {
+  const el = html(`<div class="field">
+    <span class="field-label">Telt mee voor de weekcheck</span>
+    <div class="chips">${WEEKLY.map((w) => `<button type="button" class="chip" data-tag="${w.id}">${esc(w.label)}</button>`).join('')}</div>
+    <p class="hint">Herkent de app meestal zelf aan de naam. Klopt het niet? Tik om het aan te passen.</p>
+  </div>`);
+  const refresh = () => {
+    const tags = getTags();
+    el.querySelectorAll('[data-tag]').forEach((b) => b.setAttribute('aria-pressed', String(tags.includes(b.dataset.tag))));
+  };
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tag]');
+    if (!b) return;
+    const tags = getTags();
+    const id = b.dataset.tag;
+    setTags(tags.includes(id) ? tags.filter((t) => t !== id) : [...tags, id]);
+    refresh();
+  });
+  refresh();
+  return { el, refresh };
 }
 
 // =====================================================================
@@ -131,6 +156,7 @@ async function refreshMealItems(meal) {
       it.name = p.name;
       it.brand = p.brand || '';
       it.per100 = { ...p.per100 };
+      it.tags = p.tags;
     }
   }
   return meal;
@@ -713,15 +739,21 @@ function scanPage(ctx) {
   let gen = 0;
   let stop = null;
   let busy = false;
+  let onHide = null;
+  // Camera uit (en een eventuele start afbreken).
+  const stopCamera = () => {
+    gen++;
+    stop?.();
+    stop = null;
+  };
   const page = {
     title: 'Barcode scannen',
     onLeave() {
-      gen++;
-      stop?.();
-      stop = null;
+      stopCamera();
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
     },
     render(body) {
-      const myGen = ++gen;
       body.append(
         html(`<div class="scanner">
           <video playsinline muted autoplay></video>
@@ -758,18 +790,39 @@ function scanPage(ctx) {
         handle(code);
       });
 
-      startScanner(video, handle, (err) => console.warn(err))
-        .then((s) => {
-          if (myGen !== gen) return s();
-          stop = s;
-          status.textContent = 'Richt de camera op de barcode';
-        })
-        .catch((err) => {
-          if (myGen === gen) {
-            status.textContent = cameraError(err);
-            status.classList.add('error');
-          }
-        });
+      const start = () => {
+        const myGen = ++gen;
+        status.textContent = 'Camera starten…';
+        status.classList.remove('error');
+        startScanner(video, handle, (err) => console.warn(err))
+          .then((s) => {
+            if (myGen !== gen) return s();
+            stop = s;
+            status.textContent = 'Richt de camera op de barcode';
+          })
+          .catch((err) => {
+            if (myGen === gen) {
+              status.textContent = cameraError(err);
+              status.classList.add('error');
+            }
+          });
+      };
+
+      // Telefoon vergrendeld of andere app geopend: camera meteen uit, zodat de app niet
+      // op de achtergrond actief blijft. Kom je terug, dan start hij opnieuw.
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      onHide = (e) => {
+        if (e.type === 'pagehide' || document.visibilityState === 'hidden') {
+          stopCamera();
+          status.textContent = 'Camera gepauzeerd';
+        } else if (!stop && !busy) {
+          start();
+        }
+      };
+      document.addEventListener('visibilitychange', onHide);
+      window.addEventListener('pagehide', onHide);
+      start();
     },
   };
   return page;
@@ -818,6 +871,7 @@ function productEditorPage(product, { onSaved, onDeleted, allowDelete = false } 
     title: isExisting ? 'Product bewerken' : product.source && product.source !== 'eigen' ? 'Product aanvullen' : 'Nieuw product',
     render(body) {
       const u = draft.unit === 'ml' ? 'ml' : 'g';
+      const microCount = MICROS.filter((m) => m.id !== 'salt' && Number.isFinite(draft.per100[m.id])).length;
       body.append(
         html(`<div class="form">
           ${product.source && product.source !== 'eigen' ? `<p class="hint">Bron: ${esc(SOURCE_LABEL[product.source])}. Als je opslaat, wordt dit jouw eigen versie en gaat die voortaan voor.</p>` : ''}
@@ -837,6 +891,18 @@ function productEditorPage(product, { onSaved, onDeleted, allowDelete = false } 
             ).join('')}
           </div>
           <p class="hint" data-hint></p>
+          <details class="more">
+            <summary>Vitamines en mineralen (${microCount ? `${microCount} ingevuld` : 'optioneel'})</summary>
+            <p class="hint">Alleen invullen als het op het etiket staat. Producten uit de NEVO-tabel hebben deze waarden al.</p>
+            <div class="nutrient-grid">
+              ${MICROS.filter((m) => m.id !== 'salt').map(
+                (m) => `<label class="nrow"><span>${m.label}</span>
+                  <input data-n="${m.id}" inputmode="decimal" value="${esc(numToInput(draft.per100[m.id]))}" placeholder="–">
+                  <span class="u">${m.unit}</span></label>`,
+              ).join('')}
+            </div>
+          </details>
+          <div data-tags-host></div>
           <h3 class="list-title">Porties (optioneel)</h3>
           <p class="hint">Bijv. “1 plak” = 35 g of “1 schep” = 30 g. Dan kun je straks per portie loggen.</p>
           <div class="servings"></div>
@@ -903,7 +969,17 @@ function productEditorPage(product, { onSaved, onDeleted, allowDelete = false } 
           hint.textContent = `Geen kcal ingevuld: bij opslaan gebruik ik ${fmt0(calc)} kcal (uit de macro’s).`;
         } else hint.textContent = '';
       };
-      body.querySelectorAll('[data-k]').forEach((i) => i.addEventListener('input', () => (draft[i.dataset.k] = i.value)));
+      const tags = tagChips(
+        () => productTags(draft),
+        (t) => (draft.tags = t),
+      );
+      body.querySelector('[data-tags-host]').replaceWith(tags.el);
+      body.querySelectorAll('[data-k]').forEach((i) =>
+        i.addEventListener('input', () => {
+          draft[i.dataset.k] = i.value;
+          if (i.dataset.k === 'name') tags.refresh();
+        }),
+      );
       body.querySelectorAll('[data-n]').forEach((i) =>
         i.addEventListener('input', () => {
           draft.per100[i.dataset.n] = parseNum(i.value);
@@ -985,6 +1061,7 @@ function mealEditorPage(meal, { onSaved, onDeleted } = {}) {
           <div class="meal-items"></div>
           <button class="btn ghost block" data-a="add">${icons.plus(18)} Ingrediënt toevoegen</button>
           <div class="card meal-totals"></div>
+          <div data-tags-host></div>
           <button class="btn primary block big" data-a="save">Maaltijd opslaan</button>
           ${draft.id ? `<button class="btn danger-ghost block" data-a="delete">${icons.trash(18)} Maaltijd verwijderen</button>` : ''}
         </div>`),
@@ -1016,6 +1093,11 @@ function mealEditorPage(meal, { onSaved, onDeleted } = {}) {
       };
       renderItems();
       renderTotals();
+      const tags = tagChips(
+        () => mealTags(draft),
+        (t) => (draft.tags = t),
+      );
+      body.querySelector('[data-tags-host]').replaceWith(tags.el);
 
       itemsEl.addEventListener('input', (e) => {
         const row = e.target.closest('[data-i]');
@@ -1029,12 +1111,14 @@ function mealEditorPage(meal, { onSaved, onDeleted } = {}) {
         draft.items.splice(Number(e.target.closest('[data-i]').dataset.i), 1);
         renderItems();
         renderTotals();
+        tags.refresh();
       });
       body.querySelectorAll('[data-k]').forEach((i) =>
         i.addEventListener('input', () => {
           const k = i.dataset.k;
           draft[k] = k === 'name' ? i.value : parseNum(i.value);
           renderTotals();
+          if (k === 'name') tags.refresh();
         }),
       );
       selectOnFocus(body);
@@ -1050,6 +1134,7 @@ function mealEditorPage(meal, { onSaved, onDeleted } = {}) {
                 brand: product.brand || '',
                 grams,
                 per100: { ...product.per100 },
+                tags: product.tags,
               });
               popTo(page);
             },

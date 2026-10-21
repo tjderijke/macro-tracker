@@ -25,6 +25,41 @@ export const NUTRIENTS = [
   { id: 'salt', label: 'Zout', unit: 'g' },
 ];
 
+// Vitamines en mineralen, per 100 g in de eenheid hieronder (zoals in de NEVO-tabel).
+// `nevo`: kolomcode in de NEVO-tabel; `off`: naam bij Open Food Facts (daar altijd in gram).
+// `goal`: aanbevolen hoeveelheid per dag voor volwassen mannen (Gezondheidsraad/Voedingscentrum),
+// aan te passen in Instellingen. `max`: een bovengrens in plaats van een minimum.
+export const MICROS = [
+  { id: 'vita', label: 'Vitamine A', unit: 'µg', group: 'vit', nevo: 'VITA_RAE', off: 'vitamin-a', goal: 800 },
+  { id: 'vitb1', label: 'Vitamine B1', unit: 'mg', group: 'vit', nevo: 'THIA', off: 'vitamin-b1', goal: 1.1 },
+  { id: 'vitb2', label: 'Vitamine B2', unit: 'mg', group: 'vit', nevo: 'RIBF', off: 'vitamin-b2', goal: 1.6 },
+  { id: 'vitb6', label: 'Vitamine B6', unit: 'mg', group: 'vit', nevo: 'VITB6', off: 'vitamin-b6', goal: 1.5 },
+  { id: 'folaat', label: 'Foliumzuur', unit: 'µg', group: 'vit', nevo: 'FOL', off: 'vitamin-b9', goal: 300 },
+  { id: 'vitb12', label: 'Vitamine B12', unit: 'µg', group: 'vit', nevo: 'VITB12', off: 'vitamin-b12', goal: 2.8 },
+  { id: 'vitc', label: 'Vitamine C', unit: 'mg', group: 'vit', nevo: 'VITC', off: 'vitamin-c', goal: 75 },
+  { id: 'vitd', label: 'Vitamine D', unit: 'µg', group: 'vit', nevo: 'VITD', off: 'vitamin-d', goal: 10 },
+  { id: 'vite', label: 'Vitamine E', unit: 'mg', group: 'vit', nevo: 'VITE', off: 'vitamin-e', goal: 13 },
+  { id: 'vitk', label: 'Vitamine K', unit: 'µg', group: 'vit', nevo: 'VITK', off: 'vitamin-k', goal: 70 },
+  { id: 'calcium', label: 'Calcium', unit: 'mg', group: 'min', nevo: 'CA', off: 'calcium', goal: 950 },
+  { id: 'ijzer', label: 'IJzer', unit: 'mg', group: 'min', nevo: 'FE', off: 'iron', goal: 11 },
+  { id: 'magnesium', label: 'Magnesium', unit: 'mg', group: 'min', nevo: 'MG', off: 'magnesium', goal: 350 },
+  { id: 'zink', label: 'Zink', unit: 'mg', group: 'min', nevo: 'ZN', off: 'zinc', goal: 11 },
+  { id: 'kalium', label: 'Kalium', unit: 'mg', group: 'min', nevo: 'K', off: 'potassium', goal: 3500 },
+  { id: 'seleen', label: 'Seleen', unit: 'µg', group: 'min', nevo: 'SE', off: 'selenium', goal: 70 },
+  { id: 'jodium', label: 'Jodium', unit: 'µg', group: 'min', nevo: 'ID', off: 'iodine', goal: 150 },
+  // EPA + DHA: in NEVO en Open Food Facts twee losse vetzuren in gram; wij tellen ze op in mg.
+  { id: 'epadha', label: 'Visvetzuren (EPA+DHA)', unit: 'mg', group: 'overig', goal: 200 },
+  { id: 'salt', label: 'Zout', unit: 'g', group: 'overig', goal: 6, max: true },
+];
+
+const MICRO_IDS = MICROS.filter((m) => m.id !== 'salt').map((m) => m.id);
+
+// Heeft dit product (per 100 g) bruikbare gegevens over vitamines en mineralen?
+export function hasMicros(per100) {
+  if (!per100) return false;
+  return MICRO_IDS.filter((k) => Number.isFinite(per100[k])).length >= 5;
+}
+
 export function esc(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -102,6 +137,15 @@ export function fmtDayTitle(iso) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// Kort met weekdag, bijv. "ma 19 okt"; vandaag en gisteren als woord.
+const dfDay = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+export function fmtDayShort(iso) {
+  const t = today();
+  if (iso === t) return 'vandaag';
+  if (iso === addDays(t, -1)) return 'gisteren';
+  return dfDay.format(parseDate(iso));
+}
+
 export function fmtDateShort(iso, withYear = false) {
   return (withYear ? dfShortYear : dfShort).format(parseDate(iso));
 }
@@ -117,24 +161,20 @@ export function emptyN() {
   return { kcal: 0, prot: 0, carb: 0, fat: 0, fiber: 0 };
 }
 
+// Optellen en schalen werken op alle waarden die erin staan (macro's én micronutriënten).
+// Ontbrekende waarden tellen als 0.
 export function addN(a, b) {
-  return {
-    kcal: (a.kcal || 0) + (b.kcal || 0),
-    prot: (a.prot || 0) + (b.prot || 0),
-    carb: (a.carb || 0) + (b.carb || 0),
-    fat: (a.fat || 0) + (b.fat || 0),
-    fiber: (a.fiber || 0) + (b.fiber || 0),
-  };
+  const out = emptyN();
+  for (const src of [a, b]) {
+    for (const k in src) if (Number.isFinite(src[k])) out[k] = (out[k] || 0) + src[k];
+  }
+  return out;
 }
 
 export function scaleN(n, factor) {
-  return {
-    kcal: (n.kcal || 0) * factor,
-    prot: (n.prot || 0) * factor,
-    carb: (n.carb || 0) * factor,
-    fat: (n.fat || 0) * factor,
-    fiber: (n.fiber || 0) * factor,
-  };
+  const out = emptyN();
+  for (const k in n) if (Number.isFinite(n[k])) out[k] = n[k] * factor;
+  return out;
 }
 
 export function sumN(list) {

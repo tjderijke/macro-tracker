@@ -3,7 +3,11 @@
 // zodat de gegevens alleen op je eigen toestel staan.
 
 import * as db from './db.js';
-import { norm } from './util.js';
+import { backfillMicros } from './store.js';
+import { norm, MICROS } from './util.js';
+
+// Versie van de opgeslagen NEVO-gegevens. 2 = met vitamines en mineralen.
+export const SCHEMA = 2;
 
 let cache = null;
 
@@ -28,8 +32,10 @@ export async function importFile(file) {
   const { items, name } = await readFile(file);
   await db.clear('nevo');
   await db.putMany('nevo', items);
+  await backfillMicros(items);
   const meta = {
     key: 'nevoMeta',
+    schema: SCHEMA,
     count: items.length,
     fileName: name,
     version: guessVersion(name) || guessVersion(file.name),
@@ -152,6 +158,11 @@ export function parseNevoCsv(text) {
   if (rows.length < 2) throw new Error('Leeg bestand.');
   const header = rows[0].map((h) => h.trim());
   const byCode = (code) => findCol(header, (_h, tokens) => tokens[0] === code);
+  // Exacte componentcode vóór de eenheid, bijv. "VITA_RAE (µg)" of "F20:5CN3 (g)".
+  const byExact = (code) => findCol(header, (h) => h.split(/\s/)[0].toUpperCase() === code);
+  const microCols = MICROS.filter((m) => m.nevo).map((m) => [m.id, byExact(m.nevo)]).filter(([, i]) => i >= 0);
+  const epaCol = byExact('F20:5CN3');
+  const dhaCol = byExact('F22:6CN3');
 
   const col = {
     code: findCol(header, (h) => /nevo.?code/i.test(h)),
@@ -186,6 +197,11 @@ export function parseNevoCsv(text) {
     const na = col.na >= 0 ? toNum(r[col.na]) : null;
     const nacl = col.nacl >= 0 ? toNum(r[col.nacl]) : null;
     const qty = col.quantity >= 0 ? String(r[col.quantity] ?? '') : '';
+    const micros = {};
+    for (const [id, i] of microCols) micros[id] = toNum(r[i]);
+    const epa = epaCol >= 0 ? toNum(r[epaCol]) : null;
+    const dha = dhaCol >= 0 ? toNum(r[dhaCol]) : null;
+    micros.epadha = epa === null && dha === null ? null : ((epa || 0) + (dha || 0)) * 1000;
     items.push({
       code,
       name,
@@ -203,6 +219,7 @@ export function parseNevoCsv(text) {
         fiber: col.fiber >= 0 ? toNum(r[col.fiber]) : null,
         // Zout in gram: NaCl in mg, of anders natrium (mg) x 2,5.
         salt: nacl !== null ? nacl / 1000 : na !== null ? (na * 2.5) / 1000 : null,
+        ...micros,
       },
     });
   }

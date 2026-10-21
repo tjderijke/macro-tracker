@@ -1,4 +1,5 @@
 // Lijngrafiek voor gewicht (SVG, zonder externe bibliotheek), met aanraak-tooltip.
+// De lijn is het 7-daags gemiddelde; de losse metingen staan er als lichte puntjes omheen.
 
 import { esc, fmt1, fmtDateShort, parseDate } from './util.js';
 
@@ -12,8 +13,9 @@ function niceStep(range, target) {
   return step * mag;
 }
 
-// points: [{date:'YYYY-MM-DD', kg}] oplopend op datum.
-export function weightChart(container, points) {
+// points: metingen [{date:'YYYY-MM-DD', kg}] oplopend op datum.
+// avg: per meting het 7-daags gemiddelde (zelfde volgorde en lengte).
+export function weightChart(container, points, avg) {
   container.innerHTML = '';
   if (points.length < 2) {
     container.innerHTML = `<p class="empty">${points.length ? 'Nog één meting. Na je volgende weging verschijnt hier de grafiek.' : 'Nog geen metingen in deze periode.'}</p>`;
@@ -30,8 +32,9 @@ export function weightChart(container, points) {
   const t0 = times[0];
   const t1 = times.at(-1);
   const kgs = points.map((p) => p.kg);
-  let lo = Math.min(...kgs);
-  let hi = Math.max(...kgs);
+  const avgKgs = avg.map((p) => p.kg);
+  let lo = Math.min(...kgs, ...avgKgs);
+  let hi = Math.max(...kgs, ...avgKgs);
   if (hi - lo < 1) {
     const mid = (hi + lo) / 2;
     lo = mid - 0.5;
@@ -50,7 +53,7 @@ export function weightChart(container, points) {
   svg.setAttribute('height', height);
   svg.setAttribute('class', 'chart');
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', `Gewicht van ${fmtDateShort(points[0].date)} tot ${fmtDateShort(points.at(-1).date)}`);
+  svg.setAttribute('aria-label', `7-daags gemiddeld gewicht van ${fmtDateShort(points[0].date)} tot ${fmtDateShort(points.at(-1).date)}`);
 
   let s = '';
   // Rasterlijnen + y-as labels
@@ -67,22 +70,19 @@ export function weightChart(container, points) {
     s += `<text class="tick" x="${x(parseDate(p.date).getTime()).toFixed(1)}" y="${height - 6}" text-anchor="${anchor}">${esc(fmtDateShort(p.date, !sameYear))}</text>`;
   });
 
-  // Vlak + lijn
-  const pts = points.map((p, i) => [x(times[i]), y(p.kg)]);
+  // Losse metingen als lichte puntjes, daaroverheen vlak + lijn van het gemiddelde
+  const raw = points.map((p, i) => [x(times[i]), y(p.kg)]);
+  const pts = avg.map((p, i) => [x(times[i]), y(p.kg)]);
+  const r = points.length <= 60 ? 3 : 2;
+  raw.forEach(([px, py]) => (s += `<circle class="dot-raw" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${r}"/>`));
   const line = pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join('');
   const area = `${line}L${pts.at(-1)[0].toFixed(1)},${m.top + ih}L${pts[0][0].toFixed(1)},${m.top + ih}Z`;
   s += `<path class="area" d="${area}"/>`;
   s += `<path class="line" d="${line}"/>`;
-  // Punten alleen tonen als ze niet te dicht op elkaar staan
-  if (points.length <= 40) {
-    pts.forEach(([px, py]) => (s += `<circle class="dot" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4"/>`));
-  } else {
-    const [px, py] = pts.at(-1);
-    s += `<circle class="dot" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4"/>`;
-  }
-  // Laatste waarde direct labelen
   const [lx, ly] = pts.at(-1);
-  s += `<text class="end-label" x="${(lx - 8).toFixed(1)}" y="${(ly - 12).toFixed(1)}" text-anchor="end">${fmt1(kgs.at(-1))} kg</text>`;
+  s += `<circle class="dot" cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4"/>`;
+  // Laatste gemiddelde direct labelen
+  s += `<text class="end-label" x="${(lx - 8).toFixed(1)}" y="${(ly - 12).toFixed(1)}" text-anchor="end">${fmt1(avgKgs.at(-1))} kg</text>`;
   // Crosshair (verborgen tot aanraken)
   s += `<g class="hover" visibility="hidden"><line class="cross" y1="${m.top}" y2="${m.top + ih}"/><circle class="hover-dot" r="5"/></g>`;
   svg.innerHTML = s;
@@ -110,10 +110,7 @@ export function weightChart(container, points) {
     hdot.setAttribute('cx', bx);
     hdot.setAttribute('cy', by);
     hover.setAttribute('visibility', 'visible');
-    const prev = best > 0 ? points[best].kg - points[best - 1].kg : null;
-    tip.innerHTML = `<strong>${fmt1(points[best].kg)} kg</strong><span>${esc(fmtDateShort(points[best].date, true))}</span>${
-      prev !== null ? `<span>${prev > 0 ? '+' : prev < 0 ? '−' : '±'}${fmt1(Math.abs(prev))} kg t.o.v. vorige</span>` : ''
-    }`;
+    tip.innerHTML = `<strong>Gemiddelde ${fmt1(avg[best].kg)} kg</strong><span>Gewogen ${fmt1(points[best].kg)} kg</span><span>${esc(fmtDateShort(points[best].date, true))}</span>`;
     tip.hidden = false;
     const scale = rect.width / width;
     const left = Math.min(Math.max(bx * scale, 60), rect.width - 60);
